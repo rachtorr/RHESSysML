@@ -18,6 +18,8 @@ If you don’t know what Permutation Importance is right now, don’t worry! Thi
 
 Specific code examples in this document will be based on RHESSys model output from the Sagehen Creek Experimental Watershed in the Sierra Nevada, CA. The data set incorporates model parameter uncertainty and topographic variability under two separate climate warming scenarios: (1) Historic temperature levels, and (2) Two degrees Celsius warming. The dataset and associated metadata can be accessed [here](https://www.hydroshare.org/resource/2a31bd57b7e74c758b7857679ffbb4c5/). 
 
+response var = daily average NPP by wy and other factors
+
 The code below is written with Net Primary Productivity (NPP) as the response variable of interest: this means that the output of this example will offer an answer to the question: What are the most important hydroecological factors that affect NPP in an ecosystem like Sagehen Creek, _and how might that relative importance change in a warming climate?_
 
 # Setup
@@ -39,6 +41,7 @@ library(psych)
 library(kableExtra)
 library(zeallot)
 library(DT)
+library(ggcharts)
 
 # Machine Learning packages
 library(caret)
@@ -232,7 +235,8 @@ summarize_var_removal(df_wy0_num_preds, table = TRUE)
 #### Cor Summary Plot
 
 ```{r}
-plot_cor(wy0_select_variables, df_wy0_num_preds)
+# this was originally plot_cor() but that function didn't exist so I changed it... need library ggcharts above
+plot_removed_cor(wy0_select_variables, df_wy0_num_preds)
 ```
 
 
@@ -247,7 +251,7 @@ summarize_var_removal(df_wy2_num_preds, table = TRUE)
 #### Cor Summary Plot
 
 ```{r}
-plot_cor(wy2_select_variables, df_wy2_num_preds)
+plot_removed_cor(wy2_select_variables, df_wy2_num_preds)
 ```
 
 
@@ -453,14 +457,16 @@ create_binned_plot(df2_pred_binned)
 
 Variable interactions can be investigated in many ways. The bivariate partial dependence plot below provides a graphical depiction of the marginal effect of two variables on predicted NPP from the random forest model.
 
+
 ```{r}
 bivariate.partialDependence(x = rf_wy0$finalModel,
-                            pred.data = df_wy0_reduced_allpredictors,
+                            pred.data = df_wy0_reduced[-1],
                             v1 = pred1_clim0,
                             v2 = pred2_clim0,
                             grid.size = 15,
                             col.ramp = c("orange", "green"),
                             ncols = 20)
+
 ```
 
 Running this plot for both data sets can demonstrate how variable interactions shift given different climate scenarios.
@@ -507,7 +513,7 @@ plot_min_depth_distribution(min_depth_frame,
 Lastly, SHapley Additive exPlanations (SHAP) values interpret the marginal contributions of individual features. This allows visualization of the direction of the relationships between predictors and the response variable.
 
 ```{r}
-explain0 <- explain(object = rf_wy0$finalModel,
+explain0 <- fastshap::explain(object = rf_wy0$finalModel,
                     X = subset(df_wy0_reduced, select = -response),
                     pred_wrapper = predict)
 
