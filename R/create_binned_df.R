@@ -15,7 +15,7 @@ create_binned_df <- function(df) {
     pred2 <- get(paste0("pred2_clim", clim_id))
   }
   
-  df_pred_binned <- df_wy %>% 
+  df_pred_binned <- ungroup(df_wy) %>% 
     select(all_of(pred1), all_of(pred2), response) %>%
     mutate("pred1" = df_wy[[pred1]],
            "pred2" = df_wy[[pred2]]) %>%

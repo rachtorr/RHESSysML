@@ -13,7 +13,7 @@ plot_removed_cor <- function(select_variables_vec, df_num_preds) {
   
   cor_matrix <- cor(df_num_preds)
   cor_df <- reshape2::melt(cor_matrix) %>% 
-    filter(Var1 %in% removed_variables_vec,
+    dplyr::filter(Var1 %in% removed_variables_vec,
            value != 1)
   
   dups <- duplicated(sort(cor_df$value))

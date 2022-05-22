@@ -1,5 +1,5 @@
 ---
-title: "Feature Selection Framework"
+title: "Feature Selection Framework - irrigation scenarios"
 author: "RHESSysML Capstone Group"
 date: "2/5/2022"
 output: 
@@ -9,6 +9,12 @@ output:
     code_folding: show
     theme: cerulean
 ---
+
+note: 
+
+- clim 0 scenario = avg for 2011 (pre-drought) 
+- clim 2 scenario = avg for 2015 (mid-drought)
+
 
 # Introduction
 
@@ -53,10 +59,14 @@ library(permimp)
 library(rfUtilities)
 library(randomForestExplainer)
 library(fastshap)
+library(plotmo)
 ```
 
 ```{r}
-load(here::here("data", "prepared_data.RData"))
+load(here::here("data", "rf_wue.RDS"))
+df_wy <- annual_wy
+df_wy0 <- r_wue_plant_2011
+df_wy2 <- r_wue_plant_2015
 ```
 
 
@@ -73,31 +83,25 @@ Here, we display summary statistics for the base climate scenario data.
 ```{r describe_data}
 source(here::here("R", "summarize_data.R"))
 
-summarize_data(df_wy0)
-summarize_data(df_wy2)
+summarize_data(r_wue_eco_drtyrs)
+summarize_data(r_wue_plant_2011)
 ```
 
 We can also look at the key study area characteristics. In this Sagehen Creek study area, there are six landscape positions where RHESSys was run.
 
 ```{r describe_strata}
-strata <- df_wy %>%
-  dplyr::filter(clim == 0) %>% 
-  select(c(stratumID, topo, elev, aspect, slope)) %>%
-  group_by(stratumID, topo) %>% 
+strata <- r_wue_eco_drtyrs %>%
+  dplyr::filter(clim == "hist") %>% 
+  dplyr::select(c(scen, irr, rain)) %>%
+  group_by(scen) %>% 
   summarize_if(is.numeric, mean) %>% 
-  mutate(topo = case_when(topo == "M" ~ "Mid-Slope",
-                          topo == "U" ~ "Upslope",
-                          topo == "R" ~ "Riparian")) %>%
-  dplyr::arrange(topo) %>%
-  rename("Stratum" = stratumID,
-         "Topo" = topo,
-         "Elevation (m)" = elev,
-         "Aspect (degrees CCW from East)" = aspect,
-         "Slope (degrees)" = slope)
+  dplyr::arrange(scen) 
 
 DT::datatable(strata,
-              caption = "Summary of 6 landscape positions in the Sagehen Creek study area")
+              caption = "Summary of 5 irrigation scenarios total input during drought and rain input")
 ```
+in the table, the irrigation and rain show average annual input during drought 2012-2015
+
 
 # Remove Multicollinearity
 
@@ -116,19 +120,21 @@ Similarly, the `auto_cor()` function works by computing a correlation matrix for
 First, we create data frames containing only the predictor variables to assist with the next steps.
 
 ```{r get_predictors}
-# Save data frames of predictor variables for first climate scenario
-df_wy0_num_preds <- df_wy0 %>% 
-  select(!response & where(is.numeric))
+# Save data frames of predictor variables for pre-drought WUE
+df_wy0_num_preds <- ungroup(r_wue_plant_2011) %>% 
+  select(!response & where(is.numeric)) %>% 
+  select(!wue_eco)
 
-df_wy0_fpreds <- df_wy0 %>% 
+df_wy0_fpreds <- r_wue_plant_2011 %>% 
   select(!response & where(is.factor)) %>% 
   colnames()
 
-# Save data frames of predictor variables for second climate scenario
-df_wy2_num_preds <- df_wy2 %>% 
-  select(!response & where(is.numeric))
+# Save data frames of predictor variables for during drought
+df_wy2_num_preds <- ungroup(r_wue_plant_2015) %>% 
+  select(!response & where(is.numeric)) %>% 
+  select(!wue_eco)
 
-df_wy2_fpreds <- df_wy2 %>% 
+df_wy2_fpreds <- r_wue_plant_2015 %>% 
   select(!response & where(is.factor)) %>% 
   colnames()
 ```
@@ -150,8 +156,8 @@ Below, there are two methods for setting preference order: (1) Manually creating
 # First climate scenario
 
 # Find preliminary importance using random forest
-imp0 <- train(x = df_wy0 %>% select(!response),
-              y = df_wy0$response,
+imp0 <- train(x = r_wue_plant_2011 %>% select(!response),
+              y = r_wue_plant_2011$response,
               method = 'rf',
               importance = TRUE,
               replace = TRUE,
@@ -165,8 +171,8 @@ pref_order0 <- varImp(imp0$finalModel, scale = FALSE) %>%
 # Second climate scenario
 
 # Find preliminary importance using random forest
-imp2 <- train(x = df_wy2 %>% select(!response),
-              y = df_wy2$response,
+imp2 <- train(x = r_wue_plant_2015 %>% select(!response),
+              y = r_wue_plant_2015$response,
               method = 'rf',
               importance = TRUE,
               replace = TRUE,
@@ -185,17 +191,27 @@ vif.threshold = 5
 cor.threshold = 0.75
 ```
 
-```{r remove_multicollinearity, warning = FALSE}
+```{r remove_multicollinearity, warning=FALSE}
 source(here::here("R", "remove_vif.R"))
 source(here::here("R", "remove_cor.R"))
 
 # Create list of selected variables
-wy0_vif <- remove_vif(df_wy0_num_preds, vif.threshold = vif.threshold, pref_order0)$selected.variables
-wy0_cor <- remove_cor(df_wy0_num_preds, cor.threshold = cor.threshold, pref_order0)$selected.variables
+wy0_vif <- remove_vif(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+                      vif.threshold = vif.threshold, pref_order0[pref_order0 != 'rain' & pref_order0 !="trans_reduc_perc"])$selected.variables
+
+wy0_cor <- remove_cor(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+                      cor.threshold = cor.threshold, pref_order0[pref_order0 != 'rain' & pref_order0 !="trans_reduc_perc"])$selected.variables
+
 wy0_select_variables <- intersect(wy0_vif, wy0_cor)
 
-wy2_vif <- remove_vif(df_wy2_num_preds, vif.threshold = vif.threshold, pref_order2)$selected.variables
-wy2_cor <- remove_cor(df_wy2_num_preds, cor.threshold = cor.threshold, pref_order2)$selected.variables
+wy2_vif <- remove_vif(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+                      vif.threshold = vif.threshold,
+                      pref_order2[pref_order2 != 'rain' & pref_order2 != 'trans_reduc_perc'])$selected.variables
+
+wy2_cor <- remove_cor(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+                      cor.threshold = cor.threshold,
+                      pref_order2[pref_order2 != 'rain' & pref_order2 != 'trans_reduc_perc'])$selected.variables
+
 wy2_select_variables <- intersect(wy2_vif, wy2_cor)
 
 # Combine selected variables with factors
@@ -203,10 +219,10 @@ df_wy0_preds <- c(all_of(df_wy0_fpreds), all_of(wy0_select_variables))
 df_wy2_preds <- c(all_of(df_wy2_fpreds), all_of(wy2_select_variables))
 
 # Remove numeric variables with multicollinearity
-df_wy0_reduced <- df_wy0 %>% 
+df_wy0_reduced <- r_wue_plant_2011 %>% 
   select(c(response, all_of(df_wy0_preds)))
 
-df_wy2_reduced <- df_wy2 %>% 
+df_wy2_reduced <- r_wue_plant_2015 %>% 
   select(c(response, all_of(df_wy2_preds)))
 ```
 
@@ -229,13 +245,16 @@ The following functions output summary tables and plots showing variable selecti
 #### Variable Removal Summary Table
 
 ```{r vif_summary_table_0, warning=FALSE}
+df_wy0 <- r_wue_plant_2011
+factor_vars <- df_wy0_fpreds
 summarize_var_removal(df_wy0_num_preds, table = TRUE)
+
 ```
 
 #### Cor Summary Plot
 
 ```{r}
-# this was originally plot_cor() but that function didn't exist so I changed it... need library ggcharts above
+
 plot_removed_cor(wy0_select_variables, df_wy0_num_preds)
 ```
 
@@ -436,23 +455,27 @@ pred2_clim2 <- get_important_predictors(imp_wy2, 2)
 
 source(here::here("R", "create_binned_df.R"))
 
+df_wy <- annual_wy %>% rename(response=wue_plant)
+
 df0_pred_binned <- create_binned_df(df_wy0)
 df2_pred_binned <- create_binned_df(df_wy2)
 ```
 
 ```{r}
-ggplot(df0_pred_binned, aes(x = pred1, y = .data[["response"]])) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(x = str_to_title(pred1_clim0), y = response_var,
-       title = paste(pred1_clim0, "vs", response_var,
-                     "in 0 degree climate scenario")) +
-  theme_minimal()
+response_var="wue_plant"
+
+ggplot(df0_pred_binned, aes(x = .data[[pred1_clim0]], y = .data[["response"]])) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    labs(x = str_to_title(pred1_clim0), y = response_var,
+         title = paste(pred1_clim0, "vs", response_var,
+                       "in 2011")) +
+    theme_minimal()
 
 source(here::here("R", "create_binned_plot.R"))
 
-create_binned_plot(df0_pred_binned)
-create_binned_plot(df2_pred_binned)
+create_binned_plot(df0_pred_binned, clim_id = T)
+create_binned_plot(df2_pred_binned, clim_id = T)
 ```
 
 Variable interactions can be investigated in many ways. The bivariate partial dependence plot below provides a graphical depiction of the marginal effect of two variables on predicted NPP from the random forest model.
@@ -479,6 +502,9 @@ bivariate.partialDependence(x = rf_wy2$finalModel,
                             grid.size = 15,
                             col.ramp = c("orange", "green"),
                             ncols = 20)
+
+plotmo(rf_wy0, pmethod="partdep")
+plotmo(rf_wy2, pmethod="partdep")
 ```
 
 Variable interactions between two predictors and the corresponding NPP predictions from the random forest model can be displayed as a grid of values.
@@ -498,7 +524,9 @@ The capstone team chose to use permutation importance above as our main represen
 The plot below presents the top 10 variables using % mean decrease in accuracy (%IncMSE) and mean decrease in node impurity (IncNodePurity). %IncMSE is computed from permuting the out-of-bag data, while IncNodePurity is the mean total decrease in node impurities from splitting on the given variable, as measured by the residual sum of squares.
 
 ```{r}
-varImpPlot(rf_wy0$finalModel, n.var = 10, main = "Comparing variable importance measures for climate scenario 0")
+varImpPlot(rf_wy0$finalModel, main = "Comparing variable importance measures for 2011")
+
+varImpPlot(rf_wy2$finalModel, main = "Comparing variable importance measures for 2015")
 ```
 
 The plot below visualizes the distribution of minimum depth from the random forest model. Low values, such as for precipitation below, indicate that many observations are divided into groups based on that variable.

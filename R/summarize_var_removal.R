@@ -8,7 +8,7 @@
 #' @return dataframe or datatable containing the following values for all predictor variables: removed/selected status, importance rank, and VIF
 #' @export
 #'
-summarize_var_removal <- function(reduced_df, table = FALSE, plot_prep = FALSE) {
+summarize_var_removal <- function(reduced_df, table = FALSE, plot_prep = FALSE, factor_vars) {
   
   if (plot_prep == TRUE) {
     df_name <- as.character(reduced_df)
@@ -41,7 +41,7 @@ summarize_var_removal <- function(reduced_df, table = FALSE, plot_prep = FALSE) 
   # joining dfs to create summary table of removed and selected variables
   removed_summary <- removed_importance %>% 
     left_join(removed_vif, by = "variable") %>% 
-    filter(!(variable %in% factor_vars))  %>% 
+    dplyr::filter(!(variable %in% factor_vars))  %>% 
     rename("Preliminary importance rank" = importance_rank,
            Variable = variable,
            VIF = vif,

@@ -4,10 +4,12 @@
 #' @param df_binned Dataframe with response term, top two important predictors, and quartile labels for predictor two
 #'
 #' @return ggplot object
-create_binned_plot <- function(df_binned) {
+create_binned_plot <- function(df_binned, clim_id=FALSE) {
   
   df_name <- deparse(substitute(df_binned))
-  clim_id <- str_extract(df_name, pattern = "\\d")
+  clim_id = ifelse(clim_id==T, 
+                   str_extract(df_name, pattern = "\\d"),
+                   NA)
   
   if (!is.na(clim_id)) {
     pred1 <- get(paste0("pred1_clim", clim_id))
