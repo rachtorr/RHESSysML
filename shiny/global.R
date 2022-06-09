@@ -83,8 +83,8 @@ df_wy2_reduced <- df_wy2 %>%
 
 ########## User Inputs ########## 
 
-factor_vars <- c("stratumID", "scen", "topo")
-response_var <- colnames(df_wy[1])
+factor_vars <- c("veg", "scen", "clim")
+response_var <- "wue_plant"
 
 ######### Text for the welcome page ########## 
 
@@ -122,34 +122,26 @@ dataset_sel <- selectInput(
 # Visualizations Inputs ---------------------------------------------------
 
 stratum_sel <- checkboxGroupInput("stratum_sel",
-  label = tags$h4("Select desired strata to look at:"),
-  choices = unique(df_wy$stratumID),
-  selected = unique(df_wy$stratumID)
+  label = tags$h4("Select desired scen to look at:"),
+  choices = unique(df_wy$scen),
+  selected = unique(df_wy$scen)
 )
 
 topo_sel <- checkboxGroupInput("topo_sel",
-  label = tags$h4("Select topography types to look at:"),
-  choices = c(
-    "Upslope" = "U",
-    "Mid-slope" = "M",
-    "Riparian" = "R"
-  ),
-  selected = c(
-    "Upslope" = "U",
-    "Mid-slope" = "M",
-    "Riparian" = "R"
-  )
+  label = tags$h4("Select veg types to look at:"),
+  choices = unique(df_wy$veg),
+  selected = unique(df_wy$veg)
 )
 
 clim_sel <- checkboxGroupInput("clim_sel",
   label = tags$h4("Select your climate scenario(s):"),
   choices = c(
-    "Normal Scenario" = 0,
-    "+2 Degree C Scenario" = 2
+    "Normal Scenario" = "hist",
+    "+2 Degree C Scenario" = "2C"
   ),
   selected = c(
-    "Normal Scenario" = 0,
-    "+2 Degree C Scenario" = 2
+    "Normal Scenario" = "hist",
+    "+2 Degree C Scenario" = "2C"
   )
 )
 

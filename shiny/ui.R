@@ -36,10 +36,10 @@ ui <- fluidPage(
     tabPanel(
       "Visualizations",
       sidebarPanel(
-        if ("stratumID" %in% colnames(df_wy)) {
+        if ("scen" %in% colnames(df_wy)) {
           stratum_sel
         },
-        if ("topo" %in% colnames(df_wy)) {  
+        if ("veg" %in% colnames(df_wy)) {  
           topo_sel
         },
         if ("clim" %in% colnames(df_wy)) {

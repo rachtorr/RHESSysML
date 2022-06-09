@@ -10,10 +10,6 @@ output:
     theme: cerulean
 ---
 
-note: 
-
-- clim 0 scenario = avg for 2011 (pre-drought) 
-- clim 2 scenario = avg for 2015 (mid-drought)
 
 
 # Introduction
@@ -63,10 +59,12 @@ library(plotmo)
 ```
 
 ```{r}
-load(here::here("data", "rf_wue.RDS"))
+load(here::here("data", "rf_wue_by_clim.RDS"))
 df_wy <- annual_wy
-df_wy0 <- r_wue_plant_2011
-df_wy2 <- r_wue_plant_2015
+df_wy0 <- r_wue_eco_0 %>% ungroup() 
+df_wy2 <- r_wue_eco_2 %>% ungroup() 
+
+
 ```
 
 
@@ -83,15 +81,14 @@ Here, we display summary statistics for the base climate scenario data.
 ```{r describe_data}
 source(here::here("R", "summarize_data.R"))
 
-summarize_data(r_wue_eco_drtyrs)
-summarize_data(r_wue_plant_2011)
+summarize_data(r_wue_eco_0)
+summarize_data(r_wue_eco_2)
 ```
 
 We can also look at the key study area characteristics. In this Sagehen Creek study area, there are six landscape positions where RHESSys was run.
 
 ```{r describe_strata}
-strata <- r_wue_eco_drtyrs %>%
-  dplyr::filter(clim == "hist") %>% 
+strata <- r_wue_eco_0 %>%
   dplyr::select(c(scen, irr, rain)) %>%
   group_by(scen) %>% 
   summarize_if(is.numeric, mean) %>% 
@@ -121,20 +118,21 @@ First, we create data frames containing only the predictor variables to assist w
 
 ```{r get_predictors}
 # Save data frames of predictor variables for pre-drought WUE
-df_wy0_num_preds <- ungroup(r_wue_plant_2011) %>% 
-  select(!response & where(is.numeric)) %>% 
-  select(!wue_eco)
+ r_wue_eco_0 <- r_wue_eco_0 %>% ungroup() 
+r_wue_eco_2 <- r_wue_eco_2 %>% ungroup() 
 
-df_wy0_fpreds <- r_wue_plant_2011 %>% 
+df_wy0_num_preds <- ungroup(r_wue_eco_0) %>% 
+  select(!response & where(is.numeric)) 
+
+df_wy0_fpreds <- r_wue_eco_0 %>% 
   select(!response & where(is.factor)) %>% 
   colnames()
 
 # Save data frames of predictor variables for during drought
-df_wy2_num_preds <- ungroup(r_wue_plant_2015) %>% 
-  select(!response & where(is.numeric)) %>% 
-  select(!wue_eco)
+df_wy2_num_preds <- ungroup(r_wue_eco_2) %>% 
+  select(!response & where(is.numeric)) 
 
-df_wy2_fpreds <- r_wue_plant_2015 %>% 
+df_wy2_fpreds <- r_wue_eco_2 %>% 
   select(!response & where(is.factor)) %>% 
   colnames()
 ```
@@ -146,8 +144,8 @@ Below, there are two methods for setting preference order: (1) Manually creating
 ```{r manual_preference_order}
 # Preference order can be determined manually for variables of interest:
 
-#pref_order0 <- c("precip", "rz_storage", "trans", "evap")
-#pref_order2 <- c("precip", "rz_storage", "trans", "evap")
+#pref_order0 <- c("rain", "rz_storage", "trans", "evap","irr","sat_def","mean_cpool","veg","mean_dailyCstore","psn")
+#pref_order2 <- c("rain", "rz_storage", "trans", "evap","irr","sat_def","mean_cpool","veg","mean_dailyCstore","psn")
 ```
 
 2. Run this chunk to allow preliminary random forest to automatically determine preference order.
@@ -156,32 +154,42 @@ Below, there are two methods for setting preference order: (1) Manually creating
 # First climate scenario
 
 # Find preliminary importance using random forest
-imp0 <- train(x = r_wue_plant_2011 %>% select(!response),
-              y = r_wue_plant_2011$response,
+imp0 <- train(x = r_wue_eco_0 %>% select(!response),
+              y = r_wue_eco_0$response,
               method = 'rf',
               importance = TRUE,
               replace = TRUE,
               trControl = trainControl(method = "none", seed = 4326))
 
 # Set preference order based on variable importance
-pref_order0 <- varImp(imp0$finalModel, scale = FALSE) %>% 
+# if the chunk above was used to select, change this to if statement 
+pref_order0 <- if(exists('pref_order0')==F){
+  varImp(imp0$finalModel, scale = FALSE) %>% 
   arrange(-Overall) %>% 
   rownames()
+}else{
+  pref_order0
+}
 
 # Second climate scenario
 
 # Find preliminary importance using random forest
-imp2 <- train(x = r_wue_plant_2015 %>% select(!response),
-              y = r_wue_plant_2015$response,
+imp2 <- train(x = r_wue_eco_2 %>% select(!response),
+              y = r_wue_eco_2$response,
               method = 'rf',
               importance = TRUE,
               replace = TRUE,
               trControl = trainControl(method = "none", seed = 4326))
 
 # Set preference order based on variable importance
-pref_order2 <- varImp(imp2$finalModel, scale = FALSE) %>% 
+pref_order2 <- if(exists('pref_order2')==F){
+  varImp(imp2$finalModel, scale = FALSE) %>% 
   arrange(-Overall) %>% 
   rownames()
+}else{
+  pref_order2
+}
+
 ```
 
 Thresholds for VIF and correlation can be set below, with default values of 5 and 0.75, respectively. Increasing the thresholds will reduce the number of variables that get removed, but it will increase the likelihood that collinearity influences the results.
@@ -196,21 +204,25 @@ source(here::here("R", "remove_vif.R"))
 source(here::here("R", "remove_cor.R"))
 
 # Create list of selected variables
-wy0_vif <- remove_vif(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
-                      vif.threshold = vif.threshold, pref_order0[pref_order0 != 'rain' & pref_order0 !="trans_reduc_perc"])$selected.variables
+wy0_vif <- remove_vif(select(df_wy0_num_preds,
+                             -trans_reduc_perc, -rain), 
+                      vif.threshold = vif.threshold, pref_order0)$selected.variables
 
-wy0_cor <- remove_cor(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
-                      cor.threshold = cor.threshold, pref_order0[pref_order0 != 'rain' & pref_order0 !="trans_reduc_perc"])$selected.variables
+wy0_cor <- remove_cor(select(df_wy0_num_preds,
+                             -trans_reduc_perc, -rain), 
+                      cor.threshold = cor.threshold, pref_order0)$selected.variables
 
 wy0_select_variables <- intersect(wy0_vif, wy0_cor)
 
-wy2_vif <- remove_vif(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+wy2_vif <- remove_vif(select(df_wy2_num_preds,
+                             -trans_reduc_perc, -rain), 
                       vif.threshold = vif.threshold,
-                      pref_order2[pref_order2 != 'rain' & pref_order2 != 'trans_reduc_perc'])$selected.variables
+                      pref_order2)$selected.variables
 
-wy2_cor <- remove_cor(select(df_wy0_num_preds, -rain & -trans_reduc_perc), 
+wy2_cor <- remove_cor(select(df_wy2_num_preds,
+                             -trans_reduc_perc, -rain), 
                       cor.threshold = cor.threshold,
-                      pref_order2[pref_order2 != 'rain' & pref_order2 != 'trans_reduc_perc'])$selected.variables
+                      pref_order2)$selected.variables
 
 wy2_select_variables <- intersect(wy2_vif, wy2_cor)
 
@@ -219,10 +231,10 @@ df_wy0_preds <- c(all_of(df_wy0_fpreds), all_of(wy0_select_variables))
 df_wy2_preds <- c(all_of(df_wy2_fpreds), all_of(wy2_select_variables))
 
 # Remove numeric variables with multicollinearity
-df_wy0_reduced <- r_wue_plant_2011 %>% 
+df_wy0_reduced <- r_wue_eco_0 %>% 
   select(c(response, all_of(df_wy0_preds)))
 
-df_wy2_reduced <- r_wue_plant_2015 %>% 
+df_wy2_reduced <- r_wue_eco_2 %>% 
   select(c(response, all_of(df_wy2_preds)))
 ```
 
@@ -245,7 +257,6 @@ The following functions output summary tables and plots showing variable selecti
 #### Variable Removal Summary Table
 
 ```{r vif_summary_table_0, warning=FALSE}
-df_wy0 <- r_wue_plant_2011
 
 summarize_var_removal(df_wy0_num_preds, table = TRUE,
                       factor_vars=df_wy0_fpreds)
@@ -266,7 +277,7 @@ plot_removed_cor(wy0_select_variables, df_wy0_num_preds)
 
 ```{r vif_summary_table_2, warning=FALSE}
 summarize_var_removal(df_wy2_num_preds, table = TRUE,
-                      factor_vars=df_wy2_fpreds)
+                      factor_vars = df_wy2_fpreds)
 ```
 
 #### Cor Summary Plot
@@ -450,21 +461,23 @@ The variable importance values derived from our Random Forest model allow us to 
 source(here::here("R", "get_important_predictors.R"))
 
 # assigning first and second most important variables to objects
-pred1_clim0 <- get_important_predictors(imp_wy0, 1)
-pred2_clim0 <- get_important_predictors(imp_wy0, 2)
-pred1_clim2 <- get_important_predictors(imp_wy2, 1)
-pred2_clim2 <- get_important_predictors(imp_wy2, 2)
+# change this so that if factor, don't select 
+pred1_clim0 <- get_important_predictors(imp_wy0, 1, fpreds = df_wy0_fpreds)
+pred2_clim0 <- get_important_predictors(imp_wy0, 2, fpreds = df_wy0_fpreds)
+pred1_clim2 <- get_important_predictors(imp_wy2, 1, fpreds = df_wy2_fpreds)
+pred2_clim2 <- get_important_predictors(imp_wy2, 2, fpreds = df_wy2_fpreds)
 
 source(here::here("R", "create_binned_df.R"))
 
-df_wy <- annual_wy %>% rename(response=wue_plant)
+df_wy <- annual_wy %>% rename(response=npp)
 
-df0_pred_binned <- create_binned_df(df_wy0)
-df2_pred_binned <- create_binned_df(df_wy2)
+df0_pred_binned <- create_binned_df(r_wue_eco_0)
+df2_pred_binned <- create_binned_df(r_wue_eco_2)
+
 ```
 
 ```{r}
-response_var="wue_plant"
+response_var="wue_eco"
 
 ggplot(df0_pred_binned, aes(x = .data[[pred1_clim0]], y = .data[["response"]])) +
     geom_point() +
@@ -484,6 +497,8 @@ Variable interactions can be investigated in many ways. The bivariate partial de
 
 
 ```{r}
+
+
 bivariate.partialDependence(x = rf_wy0$finalModel,
                             pred.data = df_wy0_reduced[-1],
                             v1 = pred1_clim0,

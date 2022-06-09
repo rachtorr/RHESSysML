@@ -46,13 +46,13 @@ server <- function(input, output) {
   # Create reactive data frame for visualizations tab plot
   df_wy_reactive <- reactive({
     validate(
-      if ("stratumID" %in% colnames(df_wy)) {
+      if ("scen" %in% colnames(df_wy)) {
         need(
           length(input$stratum_sel) > 0,
           "No data contained in selected strata. Please select more strata."
         )
       },
-      if ("topo" %in% colnames(df_wy)) {
+      if ("veg" %in% colnames(df_wy)) {
         need(
           length(input$topo_sel) > 0,
           "No data contained in selected topographies. Please select more topography types."
@@ -69,12 +69,12 @@ server <- function(input, output) {
     reactive_df <- df_wy %>%
       mutate(quantile = paste0("Quantile ", ntile(!!input$facet_variable, input$quantile_sel)))
     
-    if ("stratumID" %in% colnames(df_wy)) {
-      reactive_df <- reactive_df %>% filter(stratumID %in% input$stratum_sel)
+    if ("scen" %in% colnames(df_wy)) {
+      reactive_df <- reactive_df %>% filter(scen %in% input$stratum_sel)
     }
     
-    if ("topo" %in% colnames(df_wy)) {
-      reactive_df <- reactive_df %>% filter(topo %in% input$topo_sel)
+    if ("veg" %in% colnames(df_wy)) {
+      reactive_df <- reactive_df %>% filter(veg %in% input$topo_sel)
     }
     
     if ("clim" %in% colnames(df_wy)) {
@@ -94,8 +94,8 @@ server <- function(input, output) {
       geom_point(aes(color = clim), size = 0.75) +
       geom_smooth(se = FALSE, method = lm, color = "#B251F1", size = 0.75) +
       scale_color_manual(values = c(
-        "0" = "#FEA346",
-        "2" = "#4BA4A4"
+        "hist" = "#FEA346",
+        "2C" = "#4BA4A4"
       )) +
       labs(
         color = "Climate Scenario",
@@ -118,7 +118,7 @@ server <- function(input, output) {
 
   output$visualization_statistics <- DT::renderDataTable({
     df_wy_reactive() %>%
-      group_by(clim, quantile) %>%
+      group_by(clim, quantile, veg, scen) %>%
       summarize(
         "mean.y" = mean(df_wy_reactive()[, response_var]),
         "min.y" = min(df_wy_reactive()[, response_var]),

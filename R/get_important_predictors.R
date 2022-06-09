@@ -5,6 +5,15 @@
 #' @param rank Rank of desired predictor variable to return
 #'
 #' @return Variable name (str) of the variable at rank = rank
-get_important_predictors <- function(df_imp, rank) {
-  df_imp$Variable[df_imp$Rank == rank]
+get_important_predictors <- function(df_imp, rank, fpreds) {
+  pred = df_imp$Variable[df_imp$Rank == rank]
+  if(pred %in% fpreds){
+    rank=3
+    pred = df_imp$Variable[df_imp$Rank == rank]
+  }
+  if(pred %in% fpreds){
+    rank=4
+    pred = df_imp$Variable[df_imp$Rank == rank]
+  }
+  return(pred)
 }

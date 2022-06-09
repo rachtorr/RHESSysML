@@ -44,34 +44,44 @@ annual_wy <- allscen %>%
   summarise(npp=sum(npp), 
             et=sum(et), 
             trans=sum(trans), 
+            evap=sum(evaporation),
             mean_dailyCstore = mean(cs.totalc),
             mean_cpool = mean(cs.cpool),
+            mean_availc = mean(cs.availc),
             psn=sum(cdf.psn_to_cpool),
             lai=mean(lai),
             resp=sum(resp),
             rain = sum(rain),
-            irr=sum(irr),
+            psi = mean(epv.psi),
+            total_water = sum(total_water_in),
             sat_def = mean(sat_deficit),
+            sat_store = mean(sat_zone_storage),
             rz_storage = mean(rz_storage),
-            trans_reduc_perc = mean(trans_reduc_perc)) %>% 
+            rz_fc = mean(rootzone.field_capacity),
+            recharge = sum(recharge)) %>% 
   mutate(wue_eco=npp/et,
        wue_plant=npp/trans) %>%
   group_by(wy, scen, clim, veg) %>%
-  summarise(npp=mean(npp), 
+  summarise(wue_eco = mean(wue_eco),
+            wue_plant=mean(wue_plant),
+            npp=mean(npp), 
             et=mean(et), 
             trans=mean(trans), 
-            wue_eco=mean(wue_eco), 
-            wue_plant=mean(wue_plant),
-          mean_dailyCstore = mean(mean_dailyCstore),
-          mean_cpool = mean(mean_cpool),
-          psn=mean(psn),
-          lai=mean(lai),
-          resp=mean(resp),
-          rain = mean(rain),
-          irr=mean(irr),
-          sat_def = mean(sat_def),
-          rz_storage = mean(rz_storage),
-          trans_reduc_perc = mean(trans_reduc_perc))
+            evap=mean(evap),
+            mean_dailyCstore = mean(mean_dailyCstore),
+            mean_cpool = mean(mean_cpool),
+            mean_availc = mean(mean_availc),
+            psn=mean(psn),
+            lai=mean(lai),
+            resp=mean(resp),
+            rain = mean(rain),
+            psi = mean(psi),
+            total_water = mean(total_water),
+            sat_def = mean(sat_def),
+            sat_store = mean(sat_store),
+            rz_storage = mean(rz_storage),
+            rz_fc = mean(rz_fc),
+            recharge = mean(recharge))
 
 varnames <- names(dplyr::select(ungroup(annual_wy), !wy & !where(is.factor)))
 
@@ -82,15 +92,18 @@ varnames <- names(dplyr::select(ungroup(annual_wy), !wy & !where(is.factor)))
 get_response_var <- function(df,
                              var, 
                              timespan=NULL,
-                             func=NULL){
+                             func=NULL,
+                             factors=c("clim", "scen", "veg")){
   
+  varnames <- names(dplyr::select(ungroup(df), !wy & !where(is.factor)))
   varnames = varnames[varnames!=var]
+  
   
   if(is.null(timespan)){
     response = df %>% 
-      group_by(clim, scen, veg) %>% 
+      group_by(across(all_of(factors))) %>% 
       summarise_at(vars(var, all_of(varnames)), list(func)) %>%
-      dplyr::select(clim, scen, veg,
+      dplyr::select(all_of(factors),
                     response=var,
                     all_of(varnames))
   }
@@ -98,9 +111,9 @@ get_response_var <- function(df,
   if(length(timespan)==1){
     response = df %>% 
       dplyr::filter(wy==timespan) %>%
-      group_by(clim, scen, veg) %>% 
+      group_by(across(all_of(factors))) %>% 
       summarise_at(vars(var, all_of(varnames)), list(func)) %>%
-      dplyr::select(clim, scen, veg,
+      dplyr::select(all_of(factors),
                     response=var,
                     all_of(varnames))
   }
@@ -109,9 +122,9 @@ get_response_var <- function(df,
     response = df %>% 
       dplyr::filter(wy>=timespan[1] &
                       wy<=timespan[2]) %>%
-      group_by(clim, scen, veg) %>% 
+      group_by(across(all_of(factors))) %>% 
       summarise_at(vars(var, all_of(varnames)), list(func)) %>%
-      dplyr::select(clim, scen, veg,
+      dplyr::select(all_of(factors),
                     response=var,
                     all_of(varnames))
   }
@@ -126,34 +139,44 @@ tmp <- get_response_var(df=annual_wy,
                         func="mean")
 
 # collect some response vars and save data frames in data/
-r_wue_eco_drtyrs <- get_response_var(df=annual_wy,
-                                     var="wue_eco",
+r_npp_clim <- get_response_var(df=annual_wy,
+                                     var="npp",
                                      timespan=c(2012,2016),
-func="mean")
+func="mean") 
 
-r_wue_plant_2011 <- get_response_var(df=annual_wy,
-                                     var="wue_plant",
-                                     timespan=c(2011),
-                                     func="mean")
+r_wue_eco_0 = r_npp_clim %>% dplyr::filter(clim=="hist")%>% ungroup() %>% 
+  dplyr::select(-clim, -wue_eco, -wue_plant)
+r_wue_eco_2 = r_npp_clim %>% dplyr::filter(clim=="2C") %>% ungroup() %>% 
+  dplyr::select(-clim, -wue_eco, -wue_plant)
 
-r_wue_plant_2015 <- get_response_var(df=annual_wy,
-                                     var="wue_plant",
-                                     timespan=c(2015),
-                                     func="mean")
-
-r_wue_plant_2017 <- get_response_var(df=annual_wy,
-                                     var="wue_plant",
-                                     timespan=c(2017),
-                                     func="mean")
+# r_wue_plant_2011 <- get_response_var(df=annual_wy,
+#                                      var="wue_plant",
+#                                      timespan=c(2011),
+#                                      func="mean")
+# 
+# r_wue_plant_2015 <- get_response_var(df=annual_wy,
+#                                      var="wue_plant",
+#                                      timespan=c(2015),
+#                                      func="mean")
+# 
+# r_wue_plant_2017 <- get_response_var(df=annual_wy,
+#                                      var="wue_plant",
+#                                      timespan=c(2017),
+#                                      func="mean")
 
 # add response for NPP resilience for sum of wy (i.e. single value for each run equals npp17/npp11) 
 
 setwd("~/RHESSysML/data/")
-save(annual_wy, 
-     r_wue_eco_drtyrs,
-     r_wue_plant_2011,
-     r_wue_plant_2015,
-     r_wue_plant_2017,
-     file="rf_wue.RDS")
+# save(annual_wy, 
+#      r_wue_eco_drtyrs,
+#      r_wue_plant_2011,
+#      r_wue_plant_2015,
+#      r_wue_plant_2017,
+#      file="rf_wue.RDS")
+
+save(annual_wy,
+     r_wue_eco_0,
+     r_wue_eco_2,
+     file="rf_wue_by_clim.RDS")
 
 # future: add temperature as a variable or specific ecophys parameters instead of veg
